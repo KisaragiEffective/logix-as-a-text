@@ -42,7 +42,7 @@
 |`bool`    |`System.Bool`   |`bool`   |`P-X-` |
 |`c16`     |`System.Char`   |`char`   |`--X-` |
 |`c32`     |`N/A`           |`int`    |`-QX-` |
-|`decimal` |`System.Decimal`|`decimal`|`--X-` |
+|`decimal` |`System.Decimal`|`decimal`|`--L-` |
 
 * 実装上の注: `c16`はUTF-16のコードポイントであり、絵文字などのハンドリングをする際には**特に**注意を必要とする。
 * 実装上の注: `c32`はUTF-32のコードポイントである。
