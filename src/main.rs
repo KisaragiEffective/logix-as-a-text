@@ -97,7 +97,7 @@ fn setup_logger(log_level: ToolChainLogLevel, do_color: bool, output_file: Optio
         .chain(std::io::stderr());
 
     if let Some(log_file) = output_file {
-        x = x.chain(fern::log_file("output.log")?);
+        x = x.chain(fern::log_file(log_file)?);
     }
 
     x.apply()?;
