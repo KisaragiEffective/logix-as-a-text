@@ -254,6 +254,12 @@ pub enum Token {
     PartMoreEq,
     /// `<=>`
     PartLessEqMore,
+    /// `#`
+    SymSharp,
+    /// `[`
+    SymOpenBracket,
+    /// `]`
+    SymCloseBracket,
     /// reserved for future use.
     Reserved {
         matched: String,
