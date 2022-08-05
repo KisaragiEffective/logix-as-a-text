@@ -27,22 +27,23 @@
 6. 文字型: `c16|c32`
 
 #### 対応表
-|   LaaD   |      CLI       |  logix  | Flag  |
-|:---------|:---------------|:--------|:------|
-|`u8`      |`System.Int8`   |`byte`   |`P-X-` |
-|`i8`      |`System.SByte`  |`sbyte`  |`--X-` |
-|`u16`     |`System.UInt16` |`ushort` |`--X-` |
-|`i16`     |`System.Int16`  |`short`  |`--X-` |
-|`u32`     |`System.UInt32` |`uint`   |`--X-` |
-|`i32`     |`System.Int32`  |`int`    |`P-X-` |
-|`u64`     |`System.UInt64` |`ulong`  |`P-X-` |
-|`i64`     |`System.Int64`  |`long`   |`P-X-` |
-|`f32`     |`System.Single` |`float`  |`P-LM` |
-|`f64`     |`System.Double` |`double` |`P-LM` |
-|`bool`    |`System.Bool`   |`bool`   |`P-X-` |
-|`c16`     |`System.Char`   |`char`   |`--X-` |
-|`c32`     |`N/A`           |`int`    |`-QX-` |
-|`decimal` |`System.Decimal`|`decimal`|`--L-` |
+|      LaaD      |      CLI       |  logix  | Flag  |
+|:---------------|:---------------|:--------|:------|
+|`u8`            |`System.Int8`   |`byte`   |`P-X-` |
+|`i8`            |`System.SByte`  |`sbyte`  |`--X-` |
+|`u16`           |`System.UInt16` |`ushort` |`--X-` |
+|`i16`           |`System.Int16`  |`short`  |`--X-` |
+|`u32`           |`System.UInt32` |`uint`   |`--X-` |
+|`i32`           |`System.Int32`  |`int`    |`P-X-` |
+|`u64`           |`System.UInt64` |`ulong`  |`P-X-` |
+|`i64`           |`System.Int64`  |`long`   |`P-X-` |
+|`f32`           |`System.Single` |`float`  |`P-LM` |
+|`f64`           |`System.Double` |`double` |`P-LM` |
+|`bool`          |`System.Bool`   |`bool`   |`P-X-` |
+|`c16`           |`System.Char`   |`char`   |`--X-` |
+|`c32`           |`N/A`           |`int`    |`-QX-` |
+|`decimal`       |`System.Decimal`|`decimal`|`--L-` |
+|`GlobalPosition`|`N/A`           |`float3` |`-Q--` |
 
 * 実装上の注: `c16`はUTF-16のコードポイントであり、絵文字などのハンドリングをする際には**特に**注意を必要とする。
 * 実装上の注: `c32`はUTF-32のコードポイントである。
@@ -74,9 +75,10 @@
 * Opaque typeは内部の型に暗黙に変換されることはない
 
 ##### 変換表
-| DSL |inner type|Logix|
-|:----|:---------|:----|
-|`c32`|   `i32`  |`int`|
+|      DSL       |   inner type   |Logix   |
+|:---------------|:---------------|:-------|
+|`c32`           |`i32`           |`int`   |
+|`GlobalPosition`|`Matrix3<f32>`  |`float3`|
 
 #### Loose or eXact
 * 上記のFlagに`L`が立っている場合、リテラルを記述してもそのリテラルと真に等しい値になるとは限らない
