@@ -68,6 +68,22 @@ impl Lexer {
                 self.advance();
                 Token::SymRightPar
             },
+            '#' => {
+                self.advance();
+                Token::SymSharp
+            },
+            '[' => {
+                self.advance();
+                Token::SymOpenBracket
+            },
+            ']' => {
+                self.advance();
+                Token::SymCloseBracket
+            },
+            ':' => {
+                self.advance();
+                Token::SymColon
+            },
             '<' => {
                 self.advance();
                 if self.current_char().expect("oops") == '=' {
