@@ -46,11 +46,24 @@ impl FromParser for RootAst {
 
 struct Identifier(String);
 
+impl FromParser for Identifier {
+    type Err = anyhow::Error;
+
+    fn read(parser: &Parser) -> Result<Self, Self::Err> {
+        match parser.lexer.peek() {
+            Token::Identifier { inner } => {
+                parser.lexer.next();
+                Ok(Identifier(inner))
+            }
+            other => bail!("{other:?} is unexpected, identifier was expected"),
+        }
+    }
+}
 enum Statement {
     NodeDeclaration {
         identifier: Identifier,
-        type_tag: Option<TypeTag>,
-        rhs: Node,
+        type_tag: Option<UnresolvedTypeName>,
+        rhs: IdentifierOrMemberPath,
     },
     Comment {
         content: String,
@@ -72,17 +85,17 @@ impl FromParser for Statement {
 
                 let type_tag = if parser.lexer.peek() == Token::SymColon {
                     parser.lexer.next();
-                    let type_tag = parser.parse::<TypeTag>()?;
+                    let type_tag = parser.parse::<UnresolvedTypeName>()?;
                     Some(type_tag)
                 } else {
                     None
                 };
 
                 assert_eq!(parser.lexer.next(), Token::SymEq, "SymEq expected");
-                let node = parser.parse::<Node>()?;
+                let node = parser.parse::<IdentifierOrMemberPath>()?;
 
                 Ok(Self::NodeDeclaration {
-                    identifier: ident,
+                    identifier: Identifier(ident),
                     type_tag,
                     rhs: node,
                 })
@@ -99,22 +112,64 @@ impl FromParser for Statement {
 
 struct UnresolvedTypeName(IdentifierOrMemberPath);
 
+impl FromParser for UnresolvedTypeName {
+    type Err = <IdentifierOrMemberPath as FromParser>::Err;
+
+    fn read(parser: &Parser) -> Result<Self, Self::Err> {
+        parser.parse().map(|a| Self(a))
+    }
+}
+
 enum IdentifierOrMemberPath {
     Identifier(Identifier),
     MemberPath(MemberPath),
+}
+
+impl FromParser for IdentifierOrMemberPath {
+    type Err = anyhow::Error;
+
+    fn read(parser: &Parser) -> Result<Self, Self::Err> {
+        if let Ok(identifier) = parser.parse() {
+            Ok(Self::Identifier(identifier))
+        } else if let Ok(member_path) = parser.parse() {
+            Ok(Self::MemberPath(member_path))
+        } else {
+            bail!("expected member_path or identifier")
+        }
+    }
 }
 
 struct MemberPath {
     pack: Vec<Identifier>,
 }
 
+impl FromParser for MemberPath {
+    type Err = anyhow::Error;
 
-enum Node {
-    Identifier {
-        inner: Identifier,
-    },
-    Path {
-        vec: Vec<Identifier>,
+    fn read(parser: &Parser) -> Result<Self, Self::Err> {
+        let mut buf = vec![];
+        loop {
+            match parser.lexer.peek() {
+                Token::Identifier { inner } => {
+                    parser.lexer.next();
+                    buf.push(Identifier(inner))
+                }
+                other => {
+                    bail!("{other:?} was not expected, identifier was expected")
+                }
+            }
+
+            match parser.lexer.peek() {
+                Token::SymDot => {
+                    parser.lexer.next();
+                }
+                _ => break,
+            }
+        }
+
+        Ok(Self {
+            pack: buf
+        })
     }
 }
 
