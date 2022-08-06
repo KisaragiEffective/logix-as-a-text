@@ -276,6 +276,8 @@ pub enum Token {
     SymOpenBracket,
     /// `]`
     SymCloseBracket,
+    /// `:`
+    SymColon,
     /// reserved for future use.
     Reserved {
         matched: String,
