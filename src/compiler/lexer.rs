@@ -58,7 +58,14 @@ impl Lexer {
             },
             '/' => {
                 self.advance();
-                Token::SymSlash
+                if self.current_char().expect("oops") == '/' {
+                    self.advance();
+                    Token::Comment {
+                        content: self.scan_comment_content().expect("failed to process")
+                    }
+                } else {
+                    Token::SymSlash
+                }
             },
             '(' => {
                 self.advance();
@@ -182,6 +189,14 @@ impl Lexer {
         Ok(buf)
     }
 
+    fn scan_comment_content(&self) -> Result<String> {
+        let mut buf = String::new();
+        while !self.reached_end() && self.current_char().expect("oops") != '\n' {
+            buf.push(self.consume_char()?)
+        }
+        Ok(buf)
+    }
+
     pub fn peek(&self) -> Token {
         let current_index = self.index.get();
         let token = self.next();
@@ -232,6 +247,9 @@ pub enum Token {
     UnexpectedChar {
         index: usize,
         char: char,
+    },
+    Comment {
+        content: String,
     },
     EndOfFile,
     /// `"\n"`
