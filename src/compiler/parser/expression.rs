@@ -1,0 +1,331 @@
+use crate::compiler::parser::{Identifier, UnresolvedTypeName};
+
+trait BinaryOperatorNode {
+    type OperatorEnum;
+    type Rhs;
+
+    fn binary(operator: Self::OperatorEnum, lhs: Self, rhs: Self::Rhs) -> Self;
+}
+
+trait PropagateFrom<From> {
+    fn propagate(from: From) -> Self;
+}
+
+// ------------------------------------------------
+
+enum First {
+    IntegralLiteral {
+        sequence: String,
+    },
+    StringLiteral {
+        sequence: String,
+    },
+    Variable {
+        identifier: Identifier,
+    },
+    True,
+    False,
+    Propagated(Cast),
+}
+
+// ------------------------------------------------
+
+enum Cast {
+    Do {
+        lhs: Box<Self>,
+        tp: UnresolvedTypeName,
+    },
+    Propagated(Multiplicative),
+}
+
+// ------------------------------------------------
+
+enum Multiplicative {
+    Binary {
+        operator: <Self as BinaryOperatorNode>::OperatorEnum,
+        lhs: Box<Self>,
+        rhs: Box<Self>,
+    },
+    Propagated(Additive)
+}
+
+enum MultiplicativeOps {
+    /// `*`
+    Multiply,
+    /// `/`
+    Divide,
+    /// `%`
+    Reminder,
+}
+
+impl BinaryOperatorNode for Multiplicative {
+    type OperatorEnum = MultiplicativeOps;
+    type Rhs = Self;
+
+    fn binary(operator: Self::OperatorEnum, lhs: Self, rhs: Self) -> Self {
+        Self::Binary {
+            operator,
+            lhs: Box::new(lhs),
+            rhs: Box::new(rhs),
+        }
+    }
+}
+
+// ------------------------------------------------
+
+enum Additive {
+    Binary {
+        operator: <Self as BinaryOperatorNode>::OperatorEnum,
+        lhs: Box<Self>,
+        rhs: Box<Self>,
+    },
+    Propagated(BitwiseShift)
+}
+
+enum AdditiveOps {
+    Add,
+    Subtract,
+}
+
+impl BinaryOperatorNode for Additive {
+    type OperatorEnum = AdditiveOps;
+    type Rhs = Self;
+
+    fn binary(operator: Self::OperatorEnum, lhs: Self, rhs: Self) -> Self {
+        Self::Binary {
+            operator,
+            lhs: Box::new(lhs),
+            rhs: Box::new(rhs),
+        }
+    }
+}
+
+// ------------------------------------------------
+
+enum BitwiseShift {
+    Binary {
+        operator: <Self as BinaryOperatorNode>::OperatorEnum,
+        lhs: Box<Self>,
+        rhs: Box<Additive>,
+    },
+    Propagated(RelationCheckExpression)
+}
+
+enum BitwiseShiftOps {
+    LeftShift,
+    RightShift,
+}
+
+impl BinaryOperatorNode for BitwiseShift {
+    type OperatorEnum = BitwiseShiftOps;
+    type Rhs = Additive;
+
+    fn binary(operator: Self::OperatorEnum, lhs: Self, rhs: Self::Rhs) -> Self {
+        Self::Binary {
+            operator,
+            lhs: Box::new(lhs),
+            rhs: Box::new(rhs)
+        }
+    }
+}
+
+// ------------------------------------------------
+
+enum RelationCheckExpression {
+    Binary {
+        operator: <Self as BinaryOperatorNode>::OperatorEnum,
+        lhs: Box<Self>,
+        rhs: Box<BitwiseShift>,
+    },
+    Propagated(EqualityCheckExpression)
+}
+
+enum RelationCheckExpressionOps {
+    Less,
+    LessEqual,
+    More,
+    MoreEqual,
+    Spaceship,
+}
+
+impl BinaryOperatorNode for RelationCheckExpression {
+    type OperatorEnum = RelationCheckExpressionOps;
+    type Rhs = BitwiseShift;
+
+    fn binary(operator: Self::OperatorEnum, lhs: Self, rhs: Self::Rhs) -> Self {
+        Self::Binary {
+            operator,
+            lhs: Box::new(lhs),
+            rhs: Box::new(rhs)
+        }
+    }
+}
+
+// ------------------------------------------------
+
+enum EqualityCheckExpression {
+    Binary {
+        operator: <Self as BinaryOperatorNode>::OperatorEnum,
+        lhs: Box<Self>,
+        rhs: Box<RelationCheckExpression>,
+    },
+    Propagated(BitwiseAndExpression)
+}
+
+enum EqualityCheckExpressionOps {
+    Equal,
+    NotEqual,
+}
+
+impl BinaryOperatorNode for EqualityCheckExpression {
+    type OperatorEnum = EqualityCheckExpressionOps;
+    type Rhs = RelationCheckExpression;
+
+    fn binary(operator: Self::OperatorEnum, lhs: Self, rhs: Self::Rhs) -> Self {
+        Self::Binary {
+            operator,
+            lhs: Box::new(lhs),
+            rhs: Box::new(rhs)
+        }
+    }
+}
+
+// ------------------------------------------------
+
+enum BitwiseAndExpression {
+    Binary {
+        operator: <Self as BinaryOperatorNode>::OperatorEnum,
+        lhs: Box<Self>,
+        rhs: Box<EqualityCheckExpression>,
+    },
+    Propagated(BitwiseXorExpression)
+}
+
+enum BitwiseAndExpressionOp {
+    BitwiseAnd,
+}
+
+impl BinaryOperatorNode for BitwiseAndExpression {
+    type OperatorEnum = BitwiseAndExpressionOp;
+    type Rhs = EqualityCheckExpression;
+
+    fn binary(operator: Self::OperatorEnum, lhs: Self, rhs: Self::Rhs) -> Self {
+        Self::Binary {
+            operator,
+            lhs: Box::new(lhs),
+            rhs: Box::new(rhs)
+        }
+    }
+}
+
+// ------------------------------------------------
+
+enum BitwiseXorExpression {
+    Binary {
+        operator: <Self as BinaryOperatorNode>::OperatorEnum,
+        lhs: Box<Self>,
+        rhs: Box<BitwiseAndExpression>,
+    },
+    Propagated(Box<BitwiseOrExpression>)
+}
+
+enum BitwiseXorExpressionOp {
+    BitwiseXor
+}
+
+impl BinaryOperatorNode for BitwiseXorExpression {
+    type OperatorEnum = BitwiseXorExpressionOp;
+    type Rhs = BitwiseAndExpression;
+
+    fn binary(operator: Self::OperatorEnum, lhs: Self, rhs: Self::Rhs) -> Self {
+        Self::Binary {
+            operator,
+            lhs: Box::new(lhs),
+            rhs: Box::new(rhs)
+        }
+    }
+}
+
+// ------------------------------------------------
+
+enum BitwiseOrExpression {
+    Binary {
+        operator: <Self as BinaryOperatorNode>::OperatorEnum,
+        lhs: Box<Self>,
+        rhs: Box<BitwiseXorExpression>,
+    },
+    Propagated(BitwiseXorExpression)
+}
+
+enum BitwiseOrExpressionOp {
+    BitwiseOr,
+}
+
+impl BinaryOperatorNode for BitwiseOrExpression {
+    type OperatorEnum = BitwiseOrExpressionOp;
+    type Rhs = BitwiseXorExpression;
+
+    fn binary(operator: Self::OperatorEnum, lhs: Self, rhs: Self::Rhs) -> Self {
+        Self::Binary {
+            operator,
+            lhs: Box::new(lhs),
+            rhs: Box::new(rhs)
+        }
+    }
+}
+
+// ------------------------------------------------
+
+enum LogicalAndExpression {
+    Binary {
+        operator: <Self as BinaryOperatorNode>::OperatorEnum,
+        lhs: Box<Self>,
+        rhs: Box<LogicalOrExpression>,
+    },
+    Propagated(Box<LogicalOrExpression>),
+}
+
+enum LogicalAndExpressionOp {
+    LogicalAnd
+}
+
+impl BinaryOperatorNode for LogicalAndExpression {
+    type OperatorEnum = LogicalAndExpressionOp;
+    type Rhs = LogicalOrExpression;
+
+    fn binary(operator: Self::OperatorEnum, lhs: Self, rhs: Self::Rhs) -> Self {
+        Self::Binary {
+            operator,
+            lhs: Box::new(lhs),
+            rhs: Box::new(rhs)
+        }
+    }
+}
+
+// ------------------------------------------------
+
+enum LogicalOrExpression {
+    Binary {
+        operator: <Self as BinaryOperatorNode>::OperatorEnum,
+        lhs: Box<Self>,
+        rhs: Box<LogicalAndExpression>,
+    },
+    Propagated(LogicalAndExpression),
+}
+
+enum LogicalOrExpressionOp {
+    LogicalOr
+}
+
+impl BinaryOperatorNode for LogicalOrExpression {
+    type OperatorEnum = LogicalOrExpressionOp;
+    type Rhs = LogicalAndExpression;
+
+    fn binary(operator: Self::OperatorEnum, lhs: Self, rhs: Self::Rhs) -> Self {
+        Self::Binary {
+            operator,
+            lhs: Box::new(lhs),
+            rhs: Box::new(rhs),
+        }
+    }
+}

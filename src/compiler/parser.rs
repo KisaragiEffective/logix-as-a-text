@@ -1,3 +1,5 @@
+mod expression;
+
 use anyhow::bail;
 use crate::compiler::lexer::{Lexer, Token};
 use crate::compiler::parser::Statement::NoMoreStatements;
