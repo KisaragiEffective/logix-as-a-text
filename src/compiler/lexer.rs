@@ -91,6 +91,10 @@ impl Lexer {
                 self.advance();
                 Token::SymColon
             },
+            '.' => {
+                self.advance();
+                Token::SymDot
+            },
             '<' => {
                 self.advance();
                 if self.current_char().expect("oops") == '=' {
@@ -296,6 +300,8 @@ pub enum Token {
     SymCloseBracket,
     /// `:`
     SymColon,
+    /// `.`
+    SymDot,
     /// reserved for future use.
     Reserved {
         matched: String,
