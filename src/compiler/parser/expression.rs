@@ -27,7 +27,6 @@ enum First {
     },
     True,
     False,
-    Propagated(Cast),
 }
 
 impl FromParser for First {
@@ -71,7 +70,7 @@ enum Cast {
         lhs: Box<Self>,
         tp: UnresolvedTypeName,
     },
-    Propagated(Multiplicative),
+    Propagated(First),
 }
 
 // ------------------------------------------------
@@ -82,7 +81,7 @@ enum Multiplicative {
         lhs: Box<Self>,
         rhs: Box<Self>,
     },
-    Propagated(Additive)
+    Propagated(Cast)
 }
 
 enum MultiplicativeOps {
@@ -115,7 +114,7 @@ enum Additive {
         lhs: Box<Self>,
         rhs: Box<Self>,
     },
-    Propagated(BitwiseShift)
+    Propagated(Multiplicative)
 }
 
 enum AdditiveOps {
@@ -144,7 +143,7 @@ enum BitwiseShift {
         lhs: Box<Self>,
         rhs: Box<Additive>,
     },
-    Propagated(RelationCheckExpression)
+    Propagated(Additive)
 }
 
 enum BitwiseShiftOps {
@@ -173,7 +172,7 @@ enum RelationCheckExpression {
         lhs: Box<Self>,
         rhs: Box<BitwiseShift>,
     },
-    Propagated(EqualityCheckExpression)
+    Propagated(RelationCheckExpression)
 }
 
 enum RelationCheckExpressionOps {
@@ -205,7 +204,7 @@ enum EqualityCheckExpression {
         lhs: Box<Self>,
         rhs: Box<RelationCheckExpression>,
     },
-    Propagated(BitwiseAndExpression)
+    Propagated(RelationCheckExpression)
 }
 
 enum EqualityCheckExpressionOps {
@@ -234,7 +233,7 @@ enum BitwiseAndExpression {
         lhs: Box<Self>,
         rhs: Box<EqualityCheckExpression>,
     },
-    Propagated(BitwiseXorExpression)
+    Propagated(EqualityCheckExpression)
 }
 
 enum BitwiseAndExpressionOp {
@@ -262,7 +261,7 @@ enum BitwiseXorExpression {
         lhs: Box<Self>,
         rhs: Box<BitwiseAndExpression>,
     },
-    Propagated(Box<BitwiseOrExpression>)
+    Propagated(BitwiseAndExpression)
 }
 
 enum BitwiseXorExpressionOp {
@@ -318,7 +317,7 @@ enum LogicalAndExpression {
         lhs: Box<Self>,
         rhs: Box<LogicalOrExpression>,
     },
-    Propagated(Box<LogicalOrExpression>),
+    Propagated(BitwiseOrExpression),
 }
 
 enum LogicalAndExpressionOp {
