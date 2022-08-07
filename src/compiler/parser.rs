@@ -1,4 +1,4 @@
-mod expression;
+pub mod expression;
 
 use anyhow::bail;
 use crate::compiler::lexer::{Lexer, Token};
@@ -46,6 +46,7 @@ impl FromParser for RootAst {
     }
 }
 
+#[derive(Eq, PartialEq, Hash, Debug, Clone)]
 pub(crate) struct Identifier(pub(crate) String);
 
 impl FromParser for Identifier {
@@ -113,7 +114,8 @@ impl FromParser for Statement {
     }
 }
 
-struct UnresolvedTypeName(MemberPath);
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct UnresolvedTypeName(pub MemberPath);
 
 impl FromParser for UnresolvedTypeName {
     type Err = <RightHandSideValue as FromParser>::Err;
@@ -126,7 +128,7 @@ impl FromParser for UnresolvedTypeName {
 pub enum RightHandSideValue {
     Identifier(Identifier),
     MemberPath(MemberPath),
-    Expression(self::expression::First),
+    Expression(self::expression::LogicalOrExpression),
 }
 
 impl FromParser for RightHandSideValue {
@@ -145,8 +147,9 @@ impl FromParser for RightHandSideValue {
     }
 }
 
-struct MemberPath {
-    pack: Vec<Identifier>,
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct MemberPath {
+    pub pack: Vec<Identifier>,
 }
 
 impl FromParser for MemberPath {
