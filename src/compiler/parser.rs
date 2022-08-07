@@ -4,18 +4,18 @@ use anyhow::bail;
 use crate::compiler::lexer::{Lexer, Token};
 use crate::compiler::parser::Statement::NoMoreStatements;
 
-struct Parser {
+pub struct Parser {
     lexer: Lexer
 }
 
 impl Parser {
-    fn with_lexer(lexer: Lexer) -> Self {
+    pub(crate) fn with_lexer(lexer: Lexer) -> Self {
         Self {
             lexer
         }
     }
 
-    fn parse<T: FromParser>(&self) -> Result<T, T::Err> {
+    pub(crate) fn parse<T: FromParser>(&self) -> Result<T, T::Err> {
         T::read(self)
     }
 }
@@ -26,8 +26,8 @@ pub(in self) trait FromParser: Sized {
     fn read(parser: &Parser) -> Result<Self, Self::Err>;
 }
 
-struct RootAst {
-    commands: Vec<Statement>,
+pub(crate) struct RootAst {
+    pub(crate) commands: Vec<Statement>,
 }
 
 impl FromParser for RootAst {
@@ -46,7 +46,7 @@ impl FromParser for RootAst {
     }
 }
 
-struct Identifier(String);
+pub(crate) struct Identifier(pub(crate) String);
 
 impl FromParser for Identifier {
     type Err = anyhow::Error;
@@ -61,11 +61,12 @@ impl FromParser for Identifier {
         }
     }
 }
-enum Statement {
+
+pub enum Statement {
     NodeDeclaration {
         identifier: Identifier,
         type_tag: Option<UnresolvedTypeName>,
-        rhs: IdentifierOrMemberPath,
+        rhs: RightHandSideValue,
     },
     Comment {
         content: String,
@@ -94,7 +95,7 @@ impl FromParser for Statement {
                 };
 
                 assert_eq!(parser.lexer.next(), Token::SymEq, "SymEq expected");
-                let node = parser.parse::<IdentifierOrMemberPath>()?;
+                let node = parser.parse::<RightHandSideValue>()?;
 
                 Ok(Self::NodeDeclaration {
                     identifier: Identifier(ident),
@@ -112,22 +113,23 @@ impl FromParser for Statement {
     }
 }
 
-struct UnresolvedTypeName(IdentifierOrMemberPath);
+struct UnresolvedTypeName(MemberPath);
 
 impl FromParser for UnresolvedTypeName {
-    type Err = <IdentifierOrMemberPath as FromParser>::Err;
+    type Err = <RightHandSideValue as FromParser>::Err;
 
     fn read(parser: &Parser) -> Result<Self, Self::Err> {
         parser.parse().map(|a| Self(a))
     }
 }
 
-enum IdentifierOrMemberPath {
+pub enum RightHandSideValue {
     Identifier(Identifier),
     MemberPath(MemberPath),
+    Expression(self::expression::First),
 }
 
-impl FromParser for IdentifierOrMemberPath {
+impl FromParser for RightHandSideValue {
     type Err = anyhow::Error;
 
     fn read(parser: &Parser) -> Result<Self, Self::Err> {
@@ -135,6 +137,8 @@ impl FromParser for IdentifierOrMemberPath {
             Ok(Self::Identifier(identifier))
         } else if let Ok(member_path) = parser.parse() {
             Ok(Self::MemberPath(member_path))
+        } else if let Ok(first) = parser.parse() {
+            Ok(Self::Expression(first))
         } else {
             bail!("expected member_path or identifier")
         }

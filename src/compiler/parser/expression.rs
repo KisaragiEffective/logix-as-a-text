@@ -15,7 +15,7 @@ trait PropagateFrom<From> {
 
 // ------------------------------------------------
 
-enum First {
+pub enum First {
     IntegralLiteral {
         sequence: String,
     },
