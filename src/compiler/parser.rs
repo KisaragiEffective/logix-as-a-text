@@ -20,7 +20,7 @@ impl Parser {
     }
 }
 
-trait FromParser: Sized {
+pub(in self) trait FromParser: Sized {
     type Err;
     
     fn read(parser: &Parser) -> Result<Self, Self::Err>;
