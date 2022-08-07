@@ -1,4 +1,5 @@
 mod compiler;
+mod test_interpreter;
 
 use std::fmt::Display;
 use std::path::PathBuf;
