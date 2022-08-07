@@ -172,7 +172,7 @@ enum RelationCheckExpression {
         lhs: Box<Self>,
         rhs: Box<BitwiseShift>,
     },
-    Propagated(RelationCheckExpression)
+    Propagated(BitwiseShift)
 }
 
 enum RelationCheckExpressionOps {
