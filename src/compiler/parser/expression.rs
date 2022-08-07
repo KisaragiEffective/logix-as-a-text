@@ -65,6 +65,8 @@ impl FromParser for First {
 }
 // ------------------------------------------------
 
+/// left-associative
+/// e.g. `1 as u16 as u32` is equivalent with `(1 as u16) as u32`.
 enum Cast {
     Do {
         lhs: Box<Self>,
@@ -73,8 +75,27 @@ enum Cast {
     Propagated(First),
 }
 
+impl FromParser for Cast {
+    type Err = anyhow::Error;
+
+    fn read(parser: &Parser) -> Result<Self, Self::Err> {
+        let first_term = parser.parse::<Cast>()?;
+        if parser.lexer.peek() == Token::KeywprdAs {
+            parser.lexer.next();
+            let type_name = parser.parse()?;
+            Ok(Self::Do {
+                lhs: Box::new(first_term),
+                tp: type_name
+            })
+        } else {
+            Ok(first_term)
+        }
+    }
+}
+
 // ------------------------------------------------
 
+/// left-associative
 enum Multiplicative {
     Binary {
         operator: <Self as BinaryOperatorNode>::OperatorEnum,
@@ -106,8 +127,52 @@ impl BinaryOperatorNode for Multiplicative {
     }
 }
 
+impl FromParser for Multiplicative {
+    type Err = anyhow::Error;
+
+    fn read(parser: &Parser) -> Result<Self, Self::Err> {
+        let first_term = parser.parse::<Cast>()?;
+        let next_token = parser.lexer.peek();
+        let asterisk_or_slash = |token: &Token| {
+            token == &Token::SymAsterisk || token == &Token::SymSlash
+        };
+
+        if asterisk_or_slash(&next_token) {
+            // SymAsterisk | SymSlash
+            parser.lexer.next();
+            let operator_token = next_token;
+            let lhs = Self::Propagated(first_term);
+            let rhs = parser.parse()?;
+            let get_operator_from_token = |token: &Token| {
+                match token {
+                    Token::SymAsterisk => MultiplicativeOps::Multiply,
+                    Token::SymSlash => MultiplicativeOps::Divide,
+                    e => panic!("excess token: {e:?}")
+                }
+            };
+
+            let mut acc = Self::binary(get_operator_from_token(&operator_token), lhs, Self::Propagated(rhs));
+            let mut operator_token = parser.lexer.peek();
+            while asterisk_or_slash(&operator_token) {
+                // SymAsterisk | SymSlash
+                parser.lexer.next();
+                let new_rhs = Self::Propagated(parser.parse()?);
+                // 左結合になるように詰め替える
+                // これは特に除算のときに欠かせない処理である
+                acc = Self::binary(get_operator_from_token(&operator_token), acc, new_rhs);
+                operator_token = parser.lexer.peek();
+            }
+            Ok(acc)
+        } else {
+            // it is unary
+            Ok(Self::Propagated(first_term))
+        }
+    }
+}
+
 // ------------------------------------------------
 
+/// left-associative
 enum Additive {
     Binary {
         operator: <Self as BinaryOperatorNode>::OperatorEnum,
@@ -135,6 +200,48 @@ impl BinaryOperatorNode for Additive {
     }
 }
 
+impl FromParser for Additive {
+    type Err = anyhow::Error;
+
+    fn read(parser: &Parser) -> Result<Self, Self::Err> {
+        let first_term = parser.parse::<Multiplicative>()?;
+        let next_token = parser.lexer.peek();
+        let plus_or_minus = |token: &Token| {
+            token == &Token::SymPlus || token == &Token::SymMinus
+        };
+
+        if plus_or_minus(&next_token) {
+            // SymPlus | SymMinus
+            parser.lexer.next();
+            let operator_token = next_token;
+            let lhs = Self::Propagated(first_term);
+            let rhs = parser.parse::<Multiplicative>()?;
+            let get_operator_from_token = |token: &Token| {
+                match token {
+                    Token::SymPlus => AdditiveOps::Add,
+                    Token::SymMinus => AdditiveOps::Subtract,
+                    e => panic!("excess token: {e:?}")
+                }
+            };
+
+            let mut acc = Self::binary(get_operator_from_token(&operator_token), lhs, Self::Propagated(rhs));
+            let mut operator_token = parser.lexer.peek();
+            while plus_or_minus(&operator_token) {
+                // SymPlus | SymMinus
+                parser.lexer.next();
+                let new_rhs = parser.parse()?;
+                // 左結合になるように詰め替える
+                // これは特に減算のときに欠かせない処理である
+                acc = Self::binary(get_operator_from_token(&operator_token), acc, Self::Propagated(new_rhs));
+                operator_token = parser.lexer.peek();
+            }
+            Ok(acc)
+        } else {
+            // it is unary or multiplicative
+            Ok(Self::Propagated(first_term))
+        }
+    }
+}
 // ------------------------------------------------
 
 enum BitwiseShift {
@@ -164,6 +271,13 @@ impl BinaryOperatorNode for BitwiseShift {
     }
 }
 
+impl FromParser for BitwiseShift {
+    type Err = ();
+
+    fn read(parser: &Parser) -> Result<Self, Self::Err> {
+        todo!()
+    }
+}
 // ------------------------------------------------
 
 enum RelationCheckExpression {
