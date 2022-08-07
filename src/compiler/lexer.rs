@@ -399,7 +399,7 @@ pub enum Token {
     VarKeyword,
     KeywordTrue,
     KeywordFalse,
-    KeywprdAs,
+    KeywordAs,
     /// `"="`
     SymEq,
     /// `"+"`

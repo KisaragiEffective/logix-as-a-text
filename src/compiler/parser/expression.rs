@@ -80,7 +80,7 @@ impl FromParser for Cast {
 
     fn read(parser: &Parser) -> Result<Self, Self::Err> {
         let first_term = parser.parse::<Cast>()?;
-        if parser.lexer.peek() == Token::KeywprdAs {
+        if parser.lexer.peek() == Token::KeywordAs {
             parser.lexer.next();
             let type_name = parser.parse()?;
             Ok(Self::Do {
