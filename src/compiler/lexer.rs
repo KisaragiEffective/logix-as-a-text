@@ -422,6 +422,12 @@ pub enum Token {
     SymLess,
     /// `<<`
     PartLessLess,
+    /// `&`
+    SymAnd,
+    /// `^`
+    SymCaret,
+    /// `|`
+    SymPipe,
     /// `!`
     SymBang,
     /// `==`
