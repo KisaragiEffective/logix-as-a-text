@@ -2,7 +2,8 @@ use std::cell::Cell;
 
 use anyhow::{anyhow, bail, Result};
 
-static KEYWORDS: [&str; 10] = ["if", "then", "else", "elseif", "end", "endif", "while", "wend", "for", "match"];
+static KEYWORDS: [&str; 11] = ["if", "then", "else", "elseif", "end", "endif", "while", "wend", "for", "match", "as"];
+
 pub struct Lexer {
     index: Cell<usize>,
     current_source: String,
@@ -144,6 +145,7 @@ impl Lexer {
                         "var" => Token::VarKeyword,
                         "true" => Token::KeywordTrue,
                         "false" => Token::KeywordFalse,
+                        "as" => Token::KeywordAs,
                         other => Token::Reserved {
                             matched: other.to_string(),
                         }
@@ -393,6 +395,7 @@ pub enum Token {
     VarKeyword,
     KeywordTrue,
     KeywordFalse,
+    KeywprdAs,
     /// `"="`
     SymEq,
     /// `"+"`
