@@ -1,4 +1,6 @@
-use crate::compiler::parser::{Identifier, UnresolvedTypeName};
+use anyhow::bail;
+use crate::compiler::lexer::Token;
+use crate::compiler::parser::{FromParser, Identifier, Parser, UnresolvedTypeName};
 
 trait BinaryOperatorNode {
     type OperatorEnum;
@@ -28,6 +30,40 @@ enum First {
     Propagated(Cast),
 }
 
+impl FromParser for First {
+    type Err = anyhow::Error;
+
+    fn read(parser: &Parser) -> Result<Self, Self::Err> {
+        match parser.lexer.peek() {
+            Token::Identifier { inner } => {
+                parser.lexer.next();
+                let identifier = Identifier(inner);
+                let var_node = First::Variable {
+                    identifier
+                };
+
+                Ok(var_node)
+            }
+            Token::Digits { sequence } => {
+                Ok(Self::IntegralLiteral {
+                    sequence
+                })
+            }
+            Token::StringLiteral { content } => {
+                Ok(Self::StringLiteral { sequence: content })
+            }
+            Token::KeywordTrue => {
+                Ok(Self::True)
+            }
+            Token::KeywordFalse => {
+                Ok(Self::False)
+            }
+            other => {
+                bail!("unexpected token: {other:?}")
+            }
+        }
+    }
+}
 // ------------------------------------------------
 
 enum Cast {
