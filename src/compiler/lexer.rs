@@ -424,10 +424,14 @@ pub enum Token {
     PartLessLess,
     /// `&`
     SymAnd,
+    /// `&&`
+    PartAndAnd,
     /// `^`
     SymCaret,
     /// `|`
     SymPipe,
+    /// `||`
+    PartPipePipe,
     /// `!`
     SymBang,
     /// `==`
