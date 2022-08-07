@@ -106,6 +106,8 @@ impl Lexer {
                     } else {
                         Token::PartLessEq
                     }
+                } else if self.current_char().expect("oops") == '<' {
+                    Token::PartLessLess
                 } else {
                     Token::SymLess
                 }
@@ -115,6 +117,8 @@ impl Lexer {
                 if self.current_char().expect("oops") == '=' {
                     self.advance();
                     Token::PartMoreEq
+                } else if self.current_char().expect("oops") == '>' {
+                    Token::PartMoreMore
                 } else {
                     Token::SymMore
                 }
@@ -412,8 +416,12 @@ pub enum Token {
     SymRightPar,
     /// `>`
     SymMore,
+    /// `>>`
+    PartMoreMore,
     /// `<`
     SymLess,
+    /// `<<`
+    PartLessLess,
     /// `!`
     SymBang,
     /// `==`
