@@ -8,12 +8,3 @@
 ## 仕様の一覧
 1. Logix as a DSL
 2. LNJ to LaaD stub
-3. LNJ-LZBS converter
-
-## LNJ-LZBS converter
-* LZBSはlzmaを解凍してBSONをJSONにするとLNJになる。
-* LNJはJSONをBSONにしてlzmaで圧縮するとLZBSになる。
-
-## L4B2LNJ
-* LiteDBにはlz4bsonという別の形式で保存されている (独立したファイルとして見えるようになっている)。
-
