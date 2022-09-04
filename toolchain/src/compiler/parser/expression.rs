@@ -3,7 +3,7 @@ use crate::compiler::lexer::Token;
 use crate::compiler::parser::{FromParser, Identifier, Parser, UnresolvedTypeName};
 
 trait BinaryOperatorNode {
-    type OperatorEnum;
+    type OperatorEnum: Copy + FromParser;
     type Rhs;
 
     fn binary(operator: Self::OperatorEnum, lhs: Self, rhs: Self::Rhs) -> Self;
@@ -148,10 +148,86 @@ macro_rules! binary_expression_node_0 {
     };
 }
 
+macro_rules! parse_binary_expression_node {
+    (left_assoc, $name:ty) => {
+        impl FromParser for $name {
+            type Err = anyhow::Error;
+
+            fn read(parser: &Parser) -> Result<Self, Self::Err> {
+                let first_term = parser.parse()?;
+                let operator = <<Self as BinaryOperatorNode>::OperatorEnum as FromParser>::read(parser);
+
+                if let Ok(operator_token) = operator {
+                    parser.lexer.next();
+                    let lhs = Self::Propagated(first_term);
+                    let rhs = parser.parse()?;
+
+                    let mut acc = Self::binary(operator_token, lhs, rhs);
+                    let next = <<Self as BinaryOperatorNode>::OperatorEnum as FromParser>::read(parser);
+                    while let Ok(op) = next {
+                        let new_rhs = parser.parse()?;
+                        // 左結合になるように詰め替える
+                        acc = Self::binary(op, acc, new_rhs);
+                    }
+                    Ok(acc)
+                } else {
+                    Ok(Self::Propagated(first_term))
+                }
+            }
+        }
+    };
+    (right_assoc, $name:ty) => {
+                impl FromParser for $name {
+            type Err = anyhow::Error;
+
+            fn read(parser: &Parser) -> Result<Self, Self::Err> {
+                let first_term = parser.parse()?;
+                let operator = <Self as BinaryOperatorNode>::OperatorEnum::read(parser);
+
+                if let Ok(operator_token) = operator {
+                    parser.lexer.next();
+                    let lhs = Self::Propagated(first_term);
+                    let rhs = parser.parse()?;
+
+                    let mut acc = Self::binary(operator_token, lhs, Self::Propagated(rhs));
+                    Ok(acc)
+                } else {
+                    Ok(Self::Propagated(first_term))
+                }
+            }
+        }
+    }
+}
+
+/// https://users.rust-lang.org/t/80779/2
+macro_rules! operator_from_parser {
+    ($name:ty, $($token:ident => $variant:ident),+) => {
+        impl FromParser for $name {
+            type Err = anyhow::Error;
+
+            fn read(parser: &Parser) -> Result<Self, Self::Err> {
+                let op = match parser.lexer.peek() {
+                    $(Token::$token => Self::$variant,)+
+                    other => excess_token!(other)
+                };
+
+                parser.lexer.next();
+                Ok(op)
+            }
+        }
+    }
+}
+
+macro_rules! excess_token {
+    ($expr:expr) => {
+        bail!("excess token: {token:?}", token = $expr)
+    }
+}
 // ------------------------------------------------
 
 binary_expression_node!(Multiplicative, assoc: left, derive: Cast, rhs: Self, operator: MultiplicativeOps);
 
+#[derive(Copy, Clone)]
 enum MultiplicativeOps {
     /// `*`
     Multiply,
@@ -161,155 +237,41 @@ enum MultiplicativeOps {
     Reminder,
 }
 
-impl FromParser for Multiplicative {
-    type Err = anyhow::Error;
+operator_from_parser!(MultiplicativeOps, SymAsterisk => Multiply, SymSlash => Divide, SymPlus => Reminder);
 
-    fn read(parser: &Parser) -> Result<Self, Self::Err> {
-        let first_term = parser.parse::<Cast>()?;
-        let next_token = parser.lexer.peek();
-        let asterisk_or_slash = |token: &Token| {
-            token == &Token::SymAsterisk || token == &Token::SymSlash
-        };
-
-        if asterisk_or_slash(&next_token) {
-            // SymAsterisk | SymSlash
-            parser.lexer.next();
-            let operator_token = next_token;
-            let lhs = Self::Propagated(first_term);
-            let rhs = parser.parse()?;
-            let get_operator_from_token = |token: &Token| {
-                match token {
-                    Token::SymAsterisk => MultiplicativeOps::Multiply,
-                    Token::SymSlash => MultiplicativeOps::Divide,
-                    e => panic!("excess token: {e:?}")
-                }
-            };
-
-            let mut acc = Self::binary(get_operator_from_token(&operator_token), lhs, Self::Propagated(rhs));
-            let mut operator_token = parser.lexer.peek();
-            while asterisk_or_slash(&operator_token) {
-                // SymAsterisk | SymSlash
-                parser.lexer.next();
-                let new_rhs = Self::Propagated(parser.parse()?);
-                // 左結合になるように詰め替える
-                // これは特に除算のときに欠かせない処理である
-                acc = Self::binary(get_operator_from_token(&operator_token), acc, new_rhs);
-                operator_token = parser.lexer.peek();
-            }
-            Ok(acc)
-        } else {
-            // it is unary
-            Ok(Self::Propagated(first_term))
-        }
-    }
-}
+parse_binary_expression_node!(left_assoc, Multiplicative);
 
 // ------------------------------------------------
 
 binary_expression_node!(Additive, assoc: left, derive: Multiplicative, rhs: Self, operator: AdditiveOps);
 
+#[derive(Copy, Clone)]
 enum AdditiveOps {
     Add,
     Subtract,
 }
 
-impl FromParser for Additive {
-    type Err = anyhow::Error;
+operator_from_parser!(AdditiveOps, SymPlus => Add, SymMinus => Subtract);
 
-    fn read(parser: &Parser) -> Result<Self, Self::Err> {
-        let first_term = parser.parse::<Multiplicative>()?;
-        let next_token = parser.lexer.peek();
-        let plus_or_minus = |token: &Token| {
-            token == &Token::SymPlus || token == &Token::SymMinus
-        };
-
-        if plus_or_minus(&next_token) {
-            // SymPlus | SymMinus
-            parser.lexer.next();
-            let operator_token = next_token;
-            let lhs = Self::Propagated(first_term);
-            let rhs = parser.parse::<Multiplicative>()?;
-            let get_operator_from_token = |token: &Token| {
-                match token {
-                    Token::SymPlus => AdditiveOps::Add,
-                    Token::SymMinus => AdditiveOps::Subtract,
-                    e => panic!("excess token: {e:?}")
-                }
-            };
-
-            let mut acc = Self::binary(get_operator_from_token(&operator_token), lhs, Self::Propagated(rhs));
-            let mut operator_token = parser.lexer.peek();
-            while plus_or_minus(&operator_token) {
-                // SymPlus | SymMinus
-                parser.lexer.next();
-                let new_rhs = parser.parse()?;
-                // 左結合になるように詰め替える
-                // これは特に減算のときに欠かせない処理である
-                acc = Self::binary(get_operator_from_token(&operator_token), acc, Self::Propagated(new_rhs));
-                operator_token = parser.lexer.peek();
-            }
-            Ok(acc)
-        } else {
-            // it is unary or multiplicative
-            Ok(Self::Propagated(first_term))
-        }
-    }
-}
+parse_binary_expression_node!(left_assoc, Additive);
 // ------------------------------------------------
 
 binary_expression_node!(BitwiseShift, assoc: left, derive: Additive, rhs: Additive, operator: BitwiseShiftOps);
 
+#[derive(Copy, Clone)]
 enum BitwiseShiftOps {
     LeftShift,
     RightShift,
 }
 
-impl FromParser for BitwiseShift {
-    type Err = anyhow::Error;
+operator_from_parser!(BitwiseShiftOps, PartMoreMore => LeftShift, PartLessLess => RightShift);
 
-    fn read(parser: &Parser) -> Result<Self, Self::Err> {
-        let first_term = parser.parse::<Additive>()?;
-        let next_token = parser.lexer.peek();
-        let is_shift_ops = |token: &Token| {
-            token == &Token::PartLessLess || token == &Token::PartMoreMore
-        };
-
-        if is_shift_ops(&next_token) {
-            // PartLessLess | PartMoreMore
-            parser.lexer.next();
-            let operator_token = next_token;
-            let lhs = Self::Propagated(first_term);
-            let rhs = parser.parse()?;
-            let get_operator_from_token = |token: &Token| {
-                match token {
-                    Token::PartLessLess => BitwiseShiftOps::LeftShift,
-                    Token::PartMoreMore => BitwiseShiftOps::RightShift,
-                    e => panic!("excess token: {e:?}")
-                }
-            };
-
-            let mut acc = Self::binary(get_operator_from_token(&operator_token), lhs, rhs);
-            let mut operator_token = parser.lexer.peek();
-            while is_shift_ops(&operator_token) {
-                // SymPlus | SymMinus
-                parser.lexer.next();
-                let new_rhs = parser.parse()?;
-                // 左結合になるように詰め替える
-                // これは特に減算のときに欠かせない処理である
-                acc = Self::binary(get_operator_from_token(&operator_token), acc, new_rhs);
-                operator_token = parser.lexer.peek();
-            }
-            Ok(acc)
-        } else {
-            // it is unary or multiplicative
-            Ok(Self::Propagated(first_term))
-        }
-    }
-}
+parse_binary_expression_node!(left_assoc, BitwiseShift);
 // ------------------------------------------------
 
 binary_expression_node!(RelationCheckExpression, assoc: left, derive: BitwiseShift, rhs: BitwiseShift, operator: RelationCheckExpressionOps);
 
+#[derive(Copy, Clone)]
 enum RelationCheckExpressionOps {
     Less,
     LessEqual,
@@ -318,329 +280,84 @@ enum RelationCheckExpressionOps {
     Spaceship,
 }
 
-impl FromParser for RelationCheckExpression {
-    type Err = anyhow::Error;
+operator_from_parser!(RelationCheckExpressionOps, SymLess => Less, PartLessEq => LessEqual, SymMore => More, PartMoreEq => MoreEqual, PartLessEqMore => Spaceship);
 
-    fn read(parser: &Parser) -> Result<Self, Self::Err> {
-        let first_term = parser.parse::<BitwiseShift>()?;
-        let next_token = parser.lexer.peek();
-        let is_target_ops = |token: &Token| {
-            token == &Token::SymMore
-                || token == &Token::SymLess
-                || token == &Token::SymMore
-                || token == &Token::PartMoreEq
-                || token == &Token::PartLessEq
-        };
-
-        if is_target_ops(&next_token) {
-            parser.lexer.next();
-            let operator_token = next_token;
-            let lhs = Self::Propagated(first_term);
-            let rhs = parser.parse()?;
-            let get_operator_from_token = |token: &Token| {
-                match token {
-                    Token::SymMore => RelationCheckExpressionOps::More,
-                    Token::SymLess => RelationCheckExpressionOps::Less,
-                    Token::PartMoreEq => RelationCheckExpressionOps::MoreEqual,
-                    Token::PartLessEq => RelationCheckExpressionOps::LessEqual,
-                    Token::PartLessEqMore => RelationCheckExpressionOps::Spaceship,
-                    e => panic!("excess token: {e:?}")
-                }
-            };
-
-            let mut acc = Self::binary(get_operator_from_token(&operator_token), lhs, rhs);
-            let mut operator_token = parser.lexer.peek();
-            while is_target_ops(&operator_token) {
-                parser.lexer.next();
-                let new_rhs = parser.parse()?;
-                // 左結合になるように詰め替える
-                // これは特に減算のときに欠かせない処理である
-                acc = Self::binary(get_operator_from_token(&operator_token), acc, new_rhs);
-                operator_token = parser.lexer.peek();
-            }
-            Ok(acc)
-        } else {
-            Ok(Self::Propagated(first_term))
-        }
-    }
-}
+parse_binary_expression_node!(left_assoc, RelationCheckExpression);
 
 // ------------------------------------------------
 
 binary_expression_node!(EqualityCheckExpression, assoc: left, derive: RelationCheckExpression, rhs: RelationCheckExpression, operator: EqualityCheckExpressionOps);
 
+#[derive(Copy, Clone)]
 enum EqualityCheckExpressionOps {
     Equal,
     NotEqual,
 }
 
-impl FromParser for EqualityCheckExpression {
-    type Err = anyhow::Error;
+operator_from_parser!(EqualityCheckExpressionOps, PartEqEq => Equal, PartBangEq => NotEqual);
 
-    fn read(parser: &Parser) -> Result<Self, Self::Err> {
-        let first_term = parser.parse::<RelationCheckExpression>()?;
-        let next_token = parser.lexer.peek();
-        let is_target_ops = |token: &Token| {
-            token == &Token::PartEqEq || token == &Token::PartBangEq
-        };
-
-        if is_target_ops(&next_token) {
-            parser.lexer.next();
-            let operator_token = next_token;
-            let lhs = Self::Propagated(first_term);
-            let rhs = parser.parse()?;
-            let get_operator_from_token = |token: &Token| {
-                match token {
-                    Token::PartEqEq => EqualityCheckExpressionOps::Equal,
-                    Token::PartBangEq => EqualityCheckExpressionOps::NotEqual,
-                    e => panic!("excess token: {e:?}")
-                }
-            };
-
-            let mut acc = Self::binary(get_operator_from_token(&operator_token), lhs, rhs);
-            let mut operator_token = parser.lexer.peek();
-            while is_target_ops(&operator_token) {
-                parser.lexer.next();
-                let new_rhs = parser.parse::<RelationCheckExpression>()?;
-                // 左結合になるように詰め替える
-                // これは特に減算のときに欠かせない処理である
-                acc = Self::binary(get_operator_from_token(&operator_token), acc, new_rhs);
-                operator_token = parser.lexer.peek();
-            }
-            Ok(acc)
-        } else {
-            Ok(Self::Propagated(first_term))
-        }
-    }
-}
+parse_binary_expression_node!(left_assoc, EqualityCheckExpression);
 
 // ------------------------------------------------
 
 binary_expression_node!(BitwiseAndExpression, assoc: left, derive: EqualityCheckExpression, rhs: EqualityCheckExpression, operator: BitwiseAndExpressionOp);
 
+#[derive(Copy, Clone)]
 enum BitwiseAndExpressionOp {
     BitwiseAnd,
 }
 
-impl FromParser for BitwiseAndExpression {
-    type Err = anyhow::Error;
+operator_from_parser!(BitwiseAndExpressionOp, SymAnd => BitwiseAnd);
 
-    fn read(parser: &Parser) -> Result<Self, Self::Err> {
-        let first_term = parser.parse::<EqualityCheckExpression>()?;
-        let next_token = parser.lexer.peek();
-        let is_target_ops = |token: &Token| {
-            token == &Token::SymAnd
-        };
-
-        if is_target_ops(&next_token) {
-            parser.lexer.next();
-            let operator_token = next_token;
-            let lhs = Self::Propagated(first_term);
-            let rhs = parser.parse()?;
-            let get_operator_from_token = |token: &Token| {
-                match token {
-                    Token::SymAnd => BitwiseAndExpressionOp::BitwiseAnd,
-                    e => panic!("excess token: {e:?}")
-                }
-            };
-
-            let mut acc = Self::binary(get_operator_from_token(&operator_token), lhs, rhs);
-            let mut operator_token = parser.lexer.peek();
-            while is_target_ops(&operator_token) {
-                parser.lexer.next();
-                let new_rhs = parser.parse::<EqualityCheckExpression>()?;
-                // 左結合になるように詰め替える
-                // これは特に減算のときに欠かせない処理である
-                acc = Self::binary(get_operator_from_token(&operator_token), acc, new_rhs);
-                operator_token = parser.lexer.peek();
-            }
-            Ok(acc)
-        } else {
-            Ok(Self::Propagated(first_term))
-        }
-    }
-}
-
+parse_binary_expression_node!(left_assoc, BitwiseAndExpression);
 // ------------------------------------------------
 
 binary_expression_node!(BitwiseXorExpression, assoc: left, derive: BitwiseAndExpression, rhs: BitwiseAndExpression, operator: BitwiseXorExpressionOp);
 
+#[derive(Copy, Clone)]
 enum BitwiseXorExpressionOp {
     BitwiseXor
 }
 
-impl FromParser for BitwiseXorExpression {
-    type Err = anyhow::Error;
+operator_from_parser!(BitwiseXorExpressionOp, SymCaret => BitwiseXor);
 
-    fn read(parser: &Parser) -> Result<Self, Self::Err> {
-        let first_term = parser.parse::<BitwiseAndExpression>()?;
-        let next_token = parser.lexer.peek();
-        let is_target_ops = |token: &Token| {
-            token == &Token::SymCaret
-        };
-
-        if is_target_ops(&next_token) {
-            parser.lexer.next();
-            let operator_token = next_token;
-            let lhs = Self::Propagated(first_term);
-            let rhs = parser.parse()?;
-            let get_operator_from_token = |token: &Token| {
-                match token {
-                    Token::SymCaret => BitwiseXorExpressionOp::BitwiseXor,
-                    e => panic!("excess token: {e:?}")
-                }
-            };
-
-            let mut acc = Self::binary(get_operator_from_token(&operator_token), lhs, rhs);
-            let mut operator_token = parser.lexer.peek();
-            while is_target_ops(&operator_token) {
-                parser.lexer.next();
-                let new_rhs = parser.parse()?;
-                // 左結合になるように詰め替える
-                acc = Self::binary(get_operator_from_token(&operator_token), acc, new_rhs);
-                operator_token = parser.lexer.peek();
-            }
-            Ok(acc)
-        } else {
-            Ok(Self::Propagated(first_term))
-        }
-    }
-}
+parse_binary_expression_node!(left_assoc, BitwiseXorExpression);
 
 // ------------------------------------------------
 
 binary_expression_node!(BitwiseOrExpression, assoc: left, derive: BitwiseXorExpression, rhs: BitwiseXorExpression, operator: BitwiseOrExpressionOp);
 
+#[derive(Copy, Clone)]
 enum BitwiseOrExpressionOp {
     BitwiseOr,
 }
 
-impl FromParser for BitwiseOrExpression {
-    type Err = anyhow::Error;
+operator_from_parser!(BitwiseOrExpressionOp, SymPipe => BitwiseOr);
 
-    fn read(parser: &Parser) -> Result<Self, Self::Err> {
-        let first_term = parser.parse()?;
-        let next_token = parser.lexer.peek();
-        let is_target_ops = |token: &Token| {
-            token == &Token::SymPipe
-        };
-
-        if is_target_ops(&next_token) {
-            parser.lexer.next();
-            let operator_token = next_token;
-            let lhs = Self::Propagated(first_term);
-            let rhs = parser.parse()?;
-            let get_operator_from_token = |token: &Token| {
-                match token {
-                    Token::SymPipe => BitwiseOrExpressionOp::BitwiseOr,
-                    e => panic!("excess token: {e:?}")
-                }
-            };
-
-            let mut acc = Self::binary(get_operator_from_token(&operator_token), lhs, rhs);
-            let mut operator_token = parser.lexer.peek();
-            while is_target_ops(&operator_token) {
-                parser.lexer.next();
-                let new_rhs = parser.parse()?;
-                // 左結合になるように詰め替える
-                acc = Self::binary(get_operator_from_token(&operator_token), acc, new_rhs);
-                operator_token = parser.lexer.peek();
-            }
-            Ok(acc)
-        } else {
-            Ok(Self::Propagated(first_term))
-        }
-    }
-}
+parse_binary_expression_node!(left_assoc, BitwiseOrExpression);
 
 // ------------------------------------------------
 
 binary_expression_node!(LogicalAndExpression, assoc: left, derive: BitwiseOrExpression, rhs: BitwiseOrExpression, operator: LogicalAndExpressionOp);
 
+#[derive(Copy, Clone)]
 enum LogicalAndExpressionOp {
     LogicalAnd
 }
 
-impl FromParser for LogicalAndExpression {
-    type Err = anyhow::Error;
+operator_from_parser!(LogicalAndExpressionOp, PartAndAnd => LogicalAnd);
 
-    fn read(parser: &Parser) -> Result<Self, Self::Err> {
-        let first_term = parser.parse()?;
-        let next_token = parser.lexer.peek();
-        let is_target_ops = |token: &Token| {
-            token == &Token::PartAndAnd
-        };
-
-        if is_target_ops(&next_token) {
-            parser.lexer.next();
-            let operator_token = next_token;
-            let lhs = Self::Propagated(first_term);
-            let rhs = parser.parse()?;
-            let get_operator_from_token = |token: &Token| {
-                match token {
-                    Token::PartAndAnd => LogicalAndExpressionOp::LogicalAnd,
-                    e => panic!("excess token: {e:?}")
-                }
-            };
-
-            let mut acc = Self::binary(get_operator_from_token(&operator_token), lhs, rhs);
-            let mut operator_token = parser.lexer.peek();
-            while is_target_ops(&operator_token) {
-                parser.lexer.next();
-                let new_rhs = parser.parse()?;
-                // 左結合になるように詰め替える
-                acc = Self::binary(get_operator_from_token(&operator_token), acc, new_rhs);
-                operator_token = parser.lexer.peek();
-            }
-            Ok(acc)
-        } else {
-            Ok(Self::Propagated(first_term))
-        }
-    }
-}
+parse_binary_expression_node!(left_assoc, LogicalAndExpression);
 
 // ------------------------------------------------
 
 binary_expression_node!(LogicalOrExpression, assoc: left, derive: LogicalAndExpression, rhs: BitwiseAndExpression, operator: LogicalOrExpressionOp);
 
+#[derive(Copy, Clone)]
 enum LogicalOrExpressionOp {
     LogicalOr
 }
 
-impl FromParser for LogicalOrExpression {
-    type Err = anyhow::Error;
+operator_from_parser!(LogicalOrExpressionOp, PartPipePipe => LogicalOr);
 
-    fn read(parser: &Parser) -> Result<Self, Self::Err> {
-        let first_term = parser.parse()?;
-        let next_token = parser.lexer.peek();
-        let is_target_ops = |token: &Token| {
-            token == &Token::PartAndAnd
-        };
-
-        if is_target_ops(&next_token) {
-            parser.lexer.next();
-            let operator_token = next_token;
-            let lhs = Self::Propagated(first_term);
-            let rhs = parser.parse()?;
-            let get_operator_from_token = |token: &Token| {
-                match token {
-                    Token::PartPipePipe => LogicalOrExpressionOp::LogicalOr,
-                    e => panic!("excess token: {e:?}")
-                }
-            };
-
-            let mut acc = Self::binary(get_operator_from_token(&operator_token), lhs, rhs);
-            let mut operator_token = parser.lexer.peek();
-            while is_target_ops(&operator_token) {
-                parser.lexer.next();
-                let new_rhs = parser.parse()?;
-                // 左結合になるように詰め替える
-                acc = Self::binary(get_operator_from_token(&operator_token), acc, new_rhs);
-                operator_token = parser.lexer.peek();
-            }
-            Ok(acc)
-        } else {
-            Ok(Self::Propagated(first_term))
-        }
-    }
-}
+parse_binary_expression_node!(left_assoc, LogicalOrExpression);
