@@ -95,15 +95,62 @@ impl FromParser for Cast {
 
 // ------------------------------------------------
 
-/// left-associative
-enum Multiplicative {
-    Binary {
-        operator: <Self as BinaryOperatorNode>::OperatorEnum,
-        lhs: Box<Self>,
-        rhs: Box<Self>,
-    },
-    Propagated(Cast)
+macro_rules! binary_expression_node {
+    ($name:ident, assoc: left, derive: $propagate_from:ident, rhs: $rhs:ty, operator: $operators:ty) => {
+        #[doc="left-associative"]
+        enum $name {
+            // We'll handle them in the future
+            #[allow(dead_code)]
+            Binary {
+                operator: <Self as BinaryOperatorNode>::OperatorEnum,
+                lhs: Box<Self>,
+                rhs: Box<$rhs>,
+            },
+            Propagated($propagate_from)
+        }
+        binary_expression_node_0!($name, derive: $propagate_from, rhs: $rhs, operator: $operators);
+    };
+    ($name:ident, assoc: right, derive: $propagate_from:ident, rhs: $rhs:ty, operator: $operators:ty) => {
+        #[doc="right-associative"]
+        enum $name {
+            // We'll handle them in the future
+            #[allow(dead_code)]
+            Binary {
+                operator: <Self as BinaryOperatorNode>::OperatorEnum,
+                lhs: Box<Self>,
+                rhs: Box<$rhs>,
+            },
+            Propagated($propagate_from)
+        }
+        binary_expression_node_0!($name, derive: $propagate_from, rhs: $rhs, operator: $operators);
+    };
 }
+
+macro_rules! binary_expression_node_0 {
+    ($name:ident, derive: $propagate_from:ident, rhs: $rhs:ty, operator: $operators:ty) => {
+        impl PropagateFrom<$propagate_from> for $name {
+            fn propagate(from: $propagate_from) -> Self {
+                Self::Propagated(from)
+            }
+        }
+
+        impl BinaryOperatorNode for $name {
+            type OperatorEnum = $operators;
+            type Rhs = $rhs;
+            fn binary(operator: Self::OperatorEnum, lhs: Self, rhs: $rhs) -> Self {
+                Self::Binary {
+                    operator,
+                    lhs: Box::new(lhs),
+                    rhs: Box::new(rhs),
+                }
+            }
+        }
+    };
+}
+
+// ------------------------------------------------
+
+binary_expression_node!(Multiplicative, assoc: left, derive: Cast, rhs: Self, operator: MultiplicativeOps);
 
 enum MultiplicativeOps {
     /// `*`
@@ -112,19 +159,6 @@ enum MultiplicativeOps {
     Divide,
     /// `%`
     Reminder,
-}
-
-impl BinaryOperatorNode for Multiplicative {
-    type OperatorEnum = MultiplicativeOps;
-    type Rhs = Self;
-
-    fn binary(operator: Self::OperatorEnum, lhs: Self, rhs: Self) -> Self {
-        Self::Binary {
-            operator,
-            lhs: Box::new(lhs),
-            rhs: Box::new(rhs),
-        }
-    }
 }
 
 impl FromParser for Multiplicative {
@@ -172,32 +206,11 @@ impl FromParser for Multiplicative {
 
 // ------------------------------------------------
 
-/// left-associative
-enum Additive {
-    Binary {
-        operator: <Self as BinaryOperatorNode>::OperatorEnum,
-        lhs: Box<Self>,
-        rhs: Box<Self>,
-    },
-    Propagated(Multiplicative)
-}
+binary_expression_node!(Additive, assoc: left, derive: Multiplicative, rhs: Self, operator: AdditiveOps);
 
 enum AdditiveOps {
     Add,
     Subtract,
-}
-
-impl BinaryOperatorNode for Additive {
-    type OperatorEnum = AdditiveOps;
-    type Rhs = Self;
-
-    fn binary(operator: Self::OperatorEnum, lhs: Self, rhs: Self) -> Self {
-        Self::Binary {
-            operator,
-            lhs: Box::new(lhs),
-            rhs: Box::new(rhs),
-        }
-    }
 }
 
 impl FromParser for Additive {
@@ -244,32 +257,11 @@ impl FromParser for Additive {
 }
 // ------------------------------------------------
 
-/// left-associative
-enum BitwiseShift {
-    Binary {
-        operator: <Self as BinaryOperatorNode>::OperatorEnum,
-        lhs: Box<Self>,
-        rhs: Box<Additive>,
-    },
-    Propagated(Additive)
-}
+binary_expression_node!(BitwiseShift, assoc: left, derive: Additive, rhs: Additive, operator: BitwiseShiftOps);
 
 enum BitwiseShiftOps {
     LeftShift,
     RightShift,
-}
-
-impl BinaryOperatorNode for BitwiseShift {
-    type OperatorEnum = BitwiseShiftOps;
-    type Rhs = Additive;
-
-    fn binary(operator: Self::OperatorEnum, lhs: Self, rhs: Self::Rhs) -> Self {
-        Self::Binary {
-            operator,
-            lhs: Box::new(lhs),
-            rhs: Box::new(rhs)
-        }
-    }
 }
 
 impl FromParser for BitwiseShift {
@@ -316,14 +308,7 @@ impl FromParser for BitwiseShift {
 }
 // ------------------------------------------------
 
-enum RelationCheckExpression {
-    Binary {
-        operator: <Self as BinaryOperatorNode>::OperatorEnum,
-        lhs: Box<Self>,
-        rhs: Box<BitwiseShift>,
-    },
-    Propagated(BitwiseShift)
-}
+binary_expression_node!(RelationCheckExpression, assoc: left, derive: BitwiseShift, rhs: BitwiseShift, operator: RelationCheckExpressionOps);
 
 enum RelationCheckExpressionOps {
     Less,
@@ -331,19 +316,6 @@ enum RelationCheckExpressionOps {
     More,
     MoreEqual,
     Spaceship,
-}
-
-impl BinaryOperatorNode for RelationCheckExpression {
-    type OperatorEnum = RelationCheckExpressionOps;
-    type Rhs = BitwiseShift;
-
-    fn binary(operator: Self::OperatorEnum, lhs: Self, rhs: Self::Rhs) -> Self {
-        Self::Binary {
-            operator,
-            lhs: Box::new(lhs),
-            rhs: Box::new(rhs)
-        }
-    }
 }
 
 impl FromParser for RelationCheckExpression {
@@ -395,31 +367,11 @@ impl FromParser for RelationCheckExpression {
 
 // ------------------------------------------------
 
-enum EqualityCheckExpression {
-    Binary {
-        operator: <Self as BinaryOperatorNode>::OperatorEnum,
-        lhs: Box<Self>,
-        rhs: Box<RelationCheckExpression>,
-    },
-    Propagated(RelationCheckExpression)
-}
+binary_expression_node!(EqualityCheckExpression, assoc: left, derive: RelationCheckExpression, rhs: RelationCheckExpression, operator: EqualityCheckExpressionOps);
 
 enum EqualityCheckExpressionOps {
     Equal,
     NotEqual,
-}
-
-impl BinaryOperatorNode for EqualityCheckExpression {
-    type OperatorEnum = EqualityCheckExpressionOps;
-    type Rhs = RelationCheckExpression;
-
-    fn binary(operator: Self::OperatorEnum, lhs: Self, rhs: Self::Rhs) -> Self {
-        Self::Binary {
-            operator,
-            lhs: Box::new(lhs),
-            rhs: Box::new(rhs)
-        }
-    }
 }
 
 impl FromParser for EqualityCheckExpression {
@@ -464,30 +416,10 @@ impl FromParser for EqualityCheckExpression {
 
 // ------------------------------------------------
 
-enum BitwiseAndExpression {
-    Binary {
-        operator: <Self as BinaryOperatorNode>::OperatorEnum,
-        lhs: Box<Self>,
-        rhs: Box<EqualityCheckExpression>,
-    },
-    Propagated(EqualityCheckExpression)
-}
+binary_expression_node!(BitwiseAndExpression, assoc: left, derive: EqualityCheckExpression, rhs: EqualityCheckExpression, operator: BitwiseAndExpressionOp);
 
 enum BitwiseAndExpressionOp {
     BitwiseAnd,
-}
-
-impl BinaryOperatorNode for BitwiseAndExpression {
-    type OperatorEnum = BitwiseAndExpressionOp;
-    type Rhs = EqualityCheckExpression;
-
-    fn binary(operator: Self::OperatorEnum, lhs: Self, rhs: Self::Rhs) -> Self {
-        Self::Binary {
-            operator,
-            lhs: Box::new(lhs),
-            rhs: Box::new(rhs)
-        }
-    }
 }
 
 impl FromParser for BitwiseAndExpression {
@@ -531,30 +463,10 @@ impl FromParser for BitwiseAndExpression {
 
 // ------------------------------------------------
 
-enum BitwiseXorExpression {
-    Binary {
-        operator: <Self as BinaryOperatorNode>::OperatorEnum,
-        lhs: Box<Self>,
-        rhs: Box<BitwiseAndExpression>,
-    },
-    Propagated(BitwiseAndExpression)
-}
+binary_expression_node!(BitwiseXorExpression, assoc: left, derive: BitwiseAndExpression, rhs: BitwiseAndExpression, operator: BitwiseXorExpressionOp);
 
 enum BitwiseXorExpressionOp {
     BitwiseXor
-}
-
-impl BinaryOperatorNode for BitwiseXorExpression {
-    type OperatorEnum = BitwiseXorExpressionOp;
-    type Rhs = BitwiseAndExpression;
-
-    fn binary(operator: Self::OperatorEnum, lhs: Self, rhs: Self::Rhs) -> Self {
-        Self::Binary {
-            operator,
-            lhs: Box::new(lhs),
-            rhs: Box::new(rhs)
-        }
-    }
 }
 
 impl FromParser for BitwiseXorExpression {
@@ -597,30 +509,10 @@ impl FromParser for BitwiseXorExpression {
 
 // ------------------------------------------------
 
-enum BitwiseOrExpression {
-    Binary {
-        operator: <Self as BinaryOperatorNode>::OperatorEnum,
-        lhs: Box<Self>,
-        rhs: Box<BitwiseXorExpression>,
-    },
-    Propagated(BitwiseXorExpression)
-}
+binary_expression_node!(BitwiseOrExpression, assoc: left, derive: BitwiseXorExpression, rhs: BitwiseXorExpression, operator: BitwiseOrExpressionOp);
 
 enum BitwiseOrExpressionOp {
     BitwiseOr,
-}
-
-impl BinaryOperatorNode for BitwiseOrExpression {
-    type OperatorEnum = BitwiseOrExpressionOp;
-    type Rhs = BitwiseXorExpression;
-
-    fn binary(operator: Self::OperatorEnum, lhs: Self, rhs: Self::Rhs) -> Self {
-        Self::Binary {
-            operator,
-            lhs: Box::new(lhs),
-            rhs: Box::new(rhs)
-        }
-    }
 }
 
 impl FromParser for BitwiseOrExpression {
@@ -663,30 +555,10 @@ impl FromParser for BitwiseOrExpression {
 
 // ------------------------------------------------
 
-enum LogicalAndExpression {
-    Binary {
-        operator: <Self as BinaryOperatorNode>::OperatorEnum,
-        lhs: Box<Self>,
-        rhs: Box<LogicalOrExpression>,
-    },
-    Propagated(BitwiseOrExpression),
-}
+binary_expression_node!(LogicalAndExpression, assoc: left, derive: BitwiseOrExpression, rhs: BitwiseOrExpression, operator: LogicalAndExpressionOp);
 
 enum LogicalAndExpressionOp {
     LogicalAnd
-}
-
-impl BinaryOperatorNode for LogicalAndExpression {
-    type OperatorEnum = LogicalAndExpressionOp;
-    type Rhs = LogicalOrExpression;
-
-    fn binary(operator: Self::OperatorEnum, lhs: Self, rhs: Self::Rhs) -> Self {
-        Self::Binary {
-            operator,
-            lhs: Box::new(lhs),
-            rhs: Box::new(rhs)
-        }
-    }
 }
 
 impl FromParser for LogicalAndExpression {
@@ -729,30 +601,10 @@ impl FromParser for LogicalAndExpression {
 
 // ------------------------------------------------
 
-enum LogicalOrExpression {
-    Binary {
-        operator: <Self as BinaryOperatorNode>::OperatorEnum,
-        lhs: Box<Self>,
-        rhs: Box<LogicalAndExpression>,
-    },
-    Propagated(LogicalAndExpression),
-}
+binary_expression_node!(LogicalOrExpression, assoc: left, derive: LogicalAndExpression, rhs: BitwiseAndExpression, operator: LogicalOrExpressionOp);
 
 enum LogicalOrExpressionOp {
     LogicalOr
-}
-
-impl BinaryOperatorNode for LogicalOrExpression {
-    type OperatorEnum = LogicalOrExpressionOp;
-    type Rhs = LogicalAndExpression;
-
-    fn binary(operator: Self::OperatorEnum, lhs: Self, rhs: Self::Rhs) -> Self {
-        Self::Binary {
-            operator,
-            lhs: Box::new(lhs),
-            rhs: Box::new(rhs),
-        }
-    }
 }
 
 impl FromParser for LogicalOrExpression {
