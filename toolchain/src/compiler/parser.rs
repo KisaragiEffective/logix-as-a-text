@@ -4,11 +4,29 @@ use anyhow::bail;
 use crate::compiler::lexer::{Lexer, Token};
 use crate::compiler::parser::Statement::NoMoreStatements;
 
+#[macro_export]
+#[doc(hidden)]
+macro_rules! excess_token {
+    ($expr:expr) => {
+        bail!("excess token: {token:?}", token = $expr)
+    };
+    (expected $($enum_kinds:ident )|+) => {
+        bail!("Expected: {}", stringify!($($enum_kinds |)+))
+    };
+    (expected $ex:tt, actual $ac:expr) => {
+        bail!("Expected: {}, Actual: {:?}", stringify!($ex), $ac)
+    };
+    (expected $ex:tt, actual $ac:tt) => {
+        bail!("Expected: {}, Actual: {}", stringify!($ex), stringify!($ac))
+    };
+}
+
 struct Parser {
     lexer: Lexer
 }
 
 impl Parser {
+    #[allow(dead_code)]
     fn with_lexer(lexer: Lexer) -> Self {
         Self {
             lexer
@@ -26,6 +44,7 @@ pub(in self) trait FromParser: Sized {
     fn read(parser: &Parser) -> Result<Self, Self::Err>;
 }
 
+#[allow(dead_code)]
 struct RootAst {
     commands: Vec<Statement>,
 }
@@ -51,16 +70,19 @@ struct Identifier(String);
 impl FromParser for Identifier {
     type Err = anyhow::Error;
 
+    //noinspection RsLiveness
     fn read(parser: &Parser) -> Result<Self, Self::Err> {
         match parser.lexer.peek() {
             Token::Identifier { inner } => {
                 parser.lexer.next();
                 Ok(Identifier(inner))
             }
-            other => bail!("{other:?} is unexpected, identifier was expected"),
+            other => excess_token!(other),
         }
     }
 }
+
+#[allow(dead_code)]
 enum Statement {
     NodeDeclaration {
         identifier: Identifier,
@@ -82,7 +104,7 @@ impl FromParser for Statement {
                 parser.lexer.next();
                 let ident = match parser.lexer.next() {
                     Token::Identifier { inner } => inner,
-                    _ => bail!("Identifier expected")
+                    other => excess_token!(expected Identifier, actual other),
                 };
 
                 let type_tag = if parser.lexer.peek() == Token::SymColon {
@@ -106,7 +128,7 @@ impl FromParser for Statement {
                 Ok(NoMoreStatements)
             }
             other_token => {
-                bail!("Unexpected token: {other_token:?}");
+                excess_token!(other_token)
             }
         }
     }
@@ -118,7 +140,7 @@ impl FromParser for UnresolvedTypeName {
     type Err = <IdentifierOrMemberPath as FromParser>::Err;
 
     fn read(parser: &Parser) -> Result<Self, Self::Err> {
-        parser.parse().map(|a| Self(a))
+        parser.parse().map(Self)
     }
 }
 
@@ -136,7 +158,7 @@ impl FromParser for IdentifierOrMemberPath {
         } else if let Ok(member_path) = parser.parse() {
             Ok(Self::MemberPath(member_path))
         } else {
-            bail!("expected member_path or identifier")
+            excess_token!(expected Identifier | MemberPath)
         }
     }
 }
@@ -157,7 +179,7 @@ impl FromParser for MemberPath {
                     buf.push(Identifier(inner))
                 }
                 other => {
-                    bail!("{other:?} was not expected, identifier was expected")
+                    excess_token!(expected identifier, actual other);
                 }
             }
 

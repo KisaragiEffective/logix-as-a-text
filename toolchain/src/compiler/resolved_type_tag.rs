@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 enum TypeTag {
     I8,
     U8,

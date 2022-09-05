@@ -1,6 +1,7 @@
 use anyhow::bail;
 use crate::compiler::lexer::Token;
 use crate::compiler::parser::{FromParser, Identifier, Parser, UnresolvedTypeName};
+use crate::excess_token;
 
 trait BinaryOperatorNode {
     type OperatorEnum: Copy + FromParser;
@@ -15,6 +16,7 @@ trait PropagateFrom<From> {
 
 // ------------------------------------------------
 
+#[allow(dead_code)]
 enum First {
     IntegralLiteral {
         sequence: String,
@@ -57,9 +59,7 @@ impl FromParser for First {
             Token::KeywordFalse => {
                 Ok(Self::False)
             }
-            other => {
-                bail!("unexpected token: {other:?}")
-            }
+            other => excess_token!(other)
         }
     }
 }
@@ -67,6 +67,7 @@ impl FromParser for First {
 
 /// left-associative
 /// e.g. `1 as u16 as u32` is equivalent with `(1 as u16) as u32`.
+#[allow(dead_code)]
 enum Cast {
     Do {
         lhs: Box<Self>,
@@ -218,11 +219,6 @@ macro_rules! operator_from_parser {
     }
 }
 
-macro_rules! excess_token {
-    ($expr:expr) => {
-        bail!("excess token: {token:?}", token = $expr)
-    }
-}
 // ------------------------------------------------
 
 binary_expression_node!(Multiplicative, assoc: left, derive: Cast, rhs: Self, operator: MultiplicativeOps);

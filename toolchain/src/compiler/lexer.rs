@@ -300,7 +300,8 @@ impl Lexer {
                                 'E' | 'e' => 0xE,
                                 'F' | 'f' => 0xF,
                                 '"' => bail!("An Unicode escape sequence must have four hexadecimal codepoint, but there's no codepoint anymore."),
-                                other_char => bail!("An Unicode escape sequence must have four hexadecimal codepoint, but there's other character that is not valid a codepoint character."),
+                                other_char => bail!("An Unicode escape sequence must have four hexadecimal codepoint, but there's other character, {other_char},\
+                                that is not valid a codepoint character."),
                             };
                             codepoint = (codepoint << 4) | or_value;
                             self.consume_char().unwrap();
