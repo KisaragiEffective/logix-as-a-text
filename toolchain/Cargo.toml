@@ -9,7 +9,7 @@ edition = "2021"
 anyhow = "1.0.59"
 atty = "0.2.14"
 chrono = "0.4.23"
-clap = { version = "3.2.23", features = ["derive"] }
+clap = { version = "3.2.25", features = ["derive"] }
 fern = { version = "0.6.1", features = ["colored"] }
 log = "0.4.17"
 serde = { version = "1.0.150", features = ["derive"] }
