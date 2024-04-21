@@ -1,5 +1,5 @@
 # logix-as-a-text
-重要: このプロジェクトは凍結されています。後継言語は[origlang](https://github.com/KisaragiEffective/origlang)を、コーディングツールは[MirageX][https://github.com/rheniumNV/mirage-x-template]を参照してください。
+重要: このプロジェクトは凍結されています。後継言語は[origlang](https://github.com/KisaragiEffective/origlang)を、コーディングツールは[MirageX](https://github.com/rheniumNV/mirage-x-template)を参照してください。
 
 ## なにこれ
 * [LogiX](https://wiki.neos.com/wiki/LogiX)をテキスト管理できるようにするプロジェクト
